@@ -1,28 +1,33 @@
 // File: api/tamu.js
 
-import db from "../config/db"; // PASTIKAN PATH INI BENAR
+// Import pool koneksi dari file config/db.js yang baru
+import pool from "../config/db.js";
 
-export default function handler(req, res) {
+// Fungsi utama yang menangani request
+export default async function handler(req, res) {
   const { method } = req;
 
-  // Menggunakan switch untuk menangani setiap metode HTTP
+  // Switch untuk menentukan aksi berdasarkan metode HTTP
   switch (method) {
     case "GET":
-      // Cek apakah ada ID di query URL (untuk /api/tamu?id=123)
-      if (req.query.id) {
-        getGuestById(req, res);
-      } else {
-        getAllGuests(req, res);
+      try {
+        if (req.query.id) {
+          await getGuestById(req, res);
+        } else {
+          await getAllGuests(req, res);
+        }
+      } catch (error) {
+        res.status(500).json({ error: "Internal Server Error", detail: error.message });
       }
       break;
     case "POST":
-      createGuest(req, res);
+      await createGuest(req, res);
       break;
     case "PUT":
-      updateGuest(req, res);
+      await updateGuest(req, res);
       break;
     case "DELETE":
-      deleteGuest(req, res);
+      await deleteGuest(req, res);
       break;
     default:
       res.setHeader("Allow", ["GET", "POST", "PUT", "DELETE"]);
@@ -30,129 +35,129 @@ export default function handler(req, res) {
   }
 }
 
-// --- FUNGSI-FUNGSI LOGIKA (disalin dari kode lama Anda) ---
+// --- FUNGSI-FUNGSI LOGIKA (Sudah diubah ke async/await dan PostgreSQL) ---
 
 // GET /api/tamu - Ambil semua data tamu
-const getAllGuests = (req, res) => {
-  const sql = "SELECT * FROM tamu ORDER BY tanggal_kehadiran DESC, id DESC";
-  db.query(sql, (err, results) => {
-    if (err) {
-      console.error("❌ BACKEND: Gagal mengambil semua data tamu:", err);
-      return res
-        .status(500)
-        .json({ error: "Gagal mengambil data tamu", detail: err.message });
-    }
-    res.status(200).json(results);
-  });
+const getAllGuests = async (req, res) => {
+  try {
+    const sql = "SELECT * FROM tamu ORDER BY tanggal_kehadiran DESC, id DESC";
+    const result = await pool.query(sql);
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error("❌ BACKEND: Gagal mengambil semua data tamu:", err);
+    res.status(500).json({ error: "Gagal mengambil data tamu", detail: err.message });
+  }
 };
 
-// GET /api/tamu?id=:id - Ambil data tamu spesifik
-const getGuestById = (req, res) => {
-  const guestId = req.query.id; // Diubah dari req.params.id
-  const sql = "SELECT * FROM tamu WHERE id = ?";
-  db.query(sql, [guestId], (err, results) => {
-    if (err) {
-      console.error(`❌ BACKEND: Gagal mengambil data tamu dengan ID ${guestId}:`, err);
-      return res.status(500).json({ error: "Gagal mengambil data tamu dari database", detail: err.message });
+// GET /api/tamu?id=[id] - Ambil data tamu spesifik
+const getGuestById = async (req, res) => {
+  const { id } = req.query;
+  try {
+    const sql = "SELECT * FROM tamu WHERE id = $1"; // Placeholder diubah ke $1
+    const result = await pool.query(sql, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: `Data tamu dengan ID ${id} tidak ditemukan` });
     }
-    if (results.length === 0) {
-      return res.status(404).json({ message: `Data tamu dengan ID ${guestId} tidak ditemukan` });
-    }
-    res.status(200).json(results[0]);
-  });
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error(`❌ BACKEND: Gagal mengambil data tamu dengan ID ${id}:`, err);
+    res.status(500).json({ error: "Gagal mengambil data tamu dari database", detail: err.message });
+  }
 };
 
 // POST /api/tamu - Menyimpan data tamu baru
-const createGuest = (req, res) => {
-  const newGuestData = { ...req.body };
-  const jam_submit_data = new Date();
+const createGuest = async (req, res) => {
   const {
-    nama_lengkap, jenis_kelamin, email, no_hp, pekerjaan, alamat, keperluan, staff, dituju, tanggal_kehadiran, tujuan_kunjungan, topik_konsultasi, deskripsi_kebutuhan,
-  } = newGuestData;
-  const status = newGuestData.status || "Belum Diproses";
+    nama_lengkap, jenis_kelamin, email, no_hp, pekerjaan, alamat, keperluan, staff, dituju, tanggal_kehadiran, tujuan_kunjungan, topik_konsultasi, deskripsi_kebutuhan, status
+  } = req.body;
+
   if (!nama_lengkap || !jenis_kelamin || !keperluan || !tanggal_kehadiran || !alamat || !no_hp) {
-    return res.status(400).json({ error: "Data wajib (Nama, Jenis Kelamin, No HP, Alamat, Keperluan, Tanggal Kehadiran) tidak lengkap." });
+    return res.status(400).json({ error: "Data wajib tidak lengkap." });
   }
-  let validatedDateKehadiran;
+
   try {
-    validatedDateKehadiran = new Date(tanggal_kehadiran);
-    if (isNaN(validatedDateKehadiran.getTime())) throw new Error("Format tanggal tidak valid");
-  } catch (e) {
-    return res.status(400).json({ error: "Format tanggal kehadiran tidak valid.", detail: e.message });
+    const sql = `
+      INSERT INTO tamu (
+        nama_lengkap, jenis_kelamin, email, no_hp, pekerjaan, alamat, keperluan, 
+        staff, dituju, tanggal_kehadiran, status, tujuan_kunjungan, 
+        topik_konsultasi, deskripsi_kebutuhan, jam_submit_data
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+      RETURNING *; 
+    `; // Menggunakan RETURNING * untuk mendapatkan data yang baru dibuat
+
+    const values = [
+      nama_lengkap, jenis_kelamin, email || null, no_hp, pekerjaan || null, alamat, keperluan, staff || null, dituju || null, tanggal_kehadiran,
+      status || "Belum Diproses",
+      tujuan_kunjungan || null,
+      topik_konsultasi || null,
+      deskripsi_kebutuhan || null
+    ];
+
+    const result = await pool.query(sql, values);
+    res.status(201).json({ message: "Data tamu berhasil disimpan!", guest: result.rows[0] });
+
+  } catch (err) {
+    console.error("❌ BACKEND: Gagal menyimpan data tamu baru:", err);
+    res.status(500).json({ error: "Gagal menyimpan data tamu ke database.", detail: err.message });
   }
-  const sql = `INSERT INTO tamu (nama_lengkap, jenis_kelamin, email, no_hp, pekerjaan, alamat, keperluan, staff, dituju, tanggal_kehadiran, status, tujuan_kunjungan, topik_konsultasi, deskripsi_kebutuhan, jam_submit_data) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-  const values = [
-    nama_lengkap, jenis_kelamin, email || null, no_hp, pekerjaan || null, alamat, keperluan, staff || null, dituju || null, validatedDateKehadiran, status,
-    keperluan === "mitra_statistik" || keperluan === "tamu_umum" ? tujuan_kunjungan || null : null,
-    keperluan === "konsultasi_statistik" ? topik_konsultasi || null : null,
-    keperluan === "konsultasi_statistik" ? deskripsi_kebutuhan || null : null,
-    jam_submit_data,
-  ];
-  db.query(sql, values, (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: "Gagal menyimpan data tamu ke database.", detail: err.message, sqlMessage: err.sqlMessage });
-    }
-    db.query("SELECT * FROM tamu WHERE id = ?", [result.insertId], (errSelect, newGuestArray) => {
-      if (errSelect || newGuestArray.length === 0) {
-        return res.status(201).json({ message: "Data tamu berhasil disimpan! (Gagal mengambil data terbaru)", id: result.insertId, status: status });
-      }
-      res.status(201).json({ message: "Data tamu berhasil disimpan!", id: result.insertId, guest: newGuestArray[0] });
-    });
-  });
 };
 
-// PUT /api/tamu?id=:id - Update data tamu
-const updateGuest = (req, res) => {
-  const guestId = req.query.id; // Diubah dari req.params.id
-  const receivedFields = req.body;
-  // ... (seluruh logika PUT Anda disalin ke sini tanpa perubahan) ...
-  // Anda bisa salin seluruh isi dari `router.put("/:id", (req, res) => { ... });` Anda di sini
-  // Saya akan singkatkan agar tidak terlalu panjang, tapi pastikan Anda salin semuanya.
-  const selectSql = "SELECT * FROM tamu WHERE id = ?";
-  db.query(selectSql, [guestId], (errFetch, currentResults) => {
-    if (errFetch) return res.status(500).json({ error: "Gagal memproses update (fetch awal).", detail: errFetch.message });
-    if (currentResults.length === 0) return res.status(404).json({ error: `Data tamu ID ${guestId} tidak ditemukan.` });
-    
-    const fieldsToUpdate = {};
-    const allowedFieldsToUpdate = [ "nama_lengkap", "jenis_kelamin", "email", "no_hp", "pekerjaan", "alamat", "keperluan", "staff", "dituju", "tanggal_kehadiran", "status", "tujuan_kunjungan", "topik_konsultasi", "deskripsi_kebutuhan", "diterima_oleh", "isi_pertemuan", "dokumentasi" ];
-    allowedFieldsToUpdate.forEach(field => {
-        if (receivedFields.hasOwnProperty(field)) {
-            fieldsToUpdate[field] = receivedFields[field] === "" ? null : receivedFields[field];
-        }
-    });
+// PUT /api/tamu?id=[id] - Update data tamu
+const updateGuest = async (req, res) => {
+  const { id } = req.query;
+  const fields = req.body;
 
-    if (Object.keys(fieldsToUpdate).length === 0) {
-        return res.status(200).json({ message: "Tidak ada data yang diubah.", guest: currentResults[0] });
+  const allowedFields = ["nama_lengkap", "jenis_kelamin", "email", "no_hp", "pekerjaan", "alamat", "keperluan", "staff", "dituju", "tanggal_kehadiran", "status", "tujuan_kunjungan", "topik_konsultasi", "deskripsi_kebutuhan"];
+
+  const setClauses = [];
+  const values = [];
+  let paramIndex = 1;
+
+  allowedFields.forEach(field => {
+    if (fields[field] !== undefined) {
+      setClauses.push(`${field} = $${paramIndex}`);
+      values.push(fields[field]);
+      paramIndex++;
+    }
+  });
+
+  if (setClauses.length === 0) {
+    return res.status(400).json({ message: "Tidak ada data yang diubah." });
+  }
+
+  values.push(id); // Tambahkan ID untuk klausa WHERE
+
+  try {
+    const sql = `UPDATE tamu SET ${setClauses.join(", ")} WHERE id = $${paramIndex} RETURNING *;`;
+    const result = await pool.query(sql, values);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: `Data tamu dengan ID ${id} tidak ditemukan.` });
     }
 
-    const setClauses = Object.keys(fieldsToUpdate).map(key => `\`${key}\` = ?`).join(", ");
-    const finalValues = [...Object.values(fieldsToUpdate), guestId];
-    const updateSql = `UPDATE tamu SET ${setClauses} WHERE id = ?`;
-
-    db.query(updateSql, finalValues, (errUpdate, result) => {
-        if (errUpdate) return res.status(500).json({ error: "Gagal mengupdate data tamu di database.", detail: errUpdate.sqlMessage || errUpdate.message });
-        
-        db.query(selectSql, [guestId], (errFetchAgain, updatedGuestResult) => {
-            if (errFetchAgain || updatedGuestResult.length === 0) {
-                return res.status(200).json({ message: "Data tamu berhasil diperbarui (gagal mengambil data terbaru).", updated_id: guestId });
-            }
-            res.status(200).json({ message: "Data tamu berhasil diperbarui!", guest: updatedGuestResult[0] });
-        });
-    });
-  });
+    res.status(200).json({ message: "Data tamu berhasil diperbarui!", guest: result.rows[0] });
+  } catch (err) {
+    console.error(`❌ BACKEND: Gagal mengupdate data tamu ID ${id}:`, err);
+    res.status(500).json({ error: "Gagal mengupdate data tamu di database.", detail: err.message });
+  }
 };
 
-// DELETE /api/tamu?id=:id - Hapus data tamu
-const deleteGuest = (req, res) => {
-  const guestId = req.query.id; // Diubah dari req.params.id
-  const sql = "DELETE FROM tamu WHERE id = ?";
-  db.query(sql, [guestId], (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: "Gagal menghapus data tamu", detail: err.message });
+// DELETE /api/tamu?id=[id] - Hapus data tamu
+const deleteGuest = async (req, res) => {
+  const { id } = req.query;
+  try {
+    const sql = "DELETE FROM tamu WHERE id = $1"; // Placeholder diubah ke $1
+    const result = await pool.query(sql, [id]);
+
+    // Di 'pg', rowCount digunakan untuk cek jumlah baris yang terpengaruh
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: `Data tamu dengan ID ${id} tidak ditemukan untuk dihapus` });
     }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: `Data tamu dengan ID ${guestId} tidak ditemukan untuk dihapus` });
-    }
+
     res.status(200).json({ message: "Data tamu berhasil dihapus" });
-  });
+  } catch (err) {
+    console.error(`❌ BACKEND: Gagal menghapus data tamu ID ${id}:`, err);
+    res.status(500).json({ error: "Gagal menghapus data tamu", detail: err.message });
+  }
 };
