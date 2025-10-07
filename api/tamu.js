@@ -7,7 +7,7 @@ import pool from "../config/db.js";
 export default async function handler(req, res) {
   const { method } = req;
 
-  // Switch untuk menentukan aksi berdasarkan metode HTTP
+  // Switch untuk menentukan aksi berdasarkan metode HTTpp
   switch (method) {
     case "GET":
       try {
