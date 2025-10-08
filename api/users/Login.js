@@ -5,7 +5,7 @@ import cors from 'cors'; // 1. Impor package cors
 
 // 2. Inisialisasi middleware cors dengan domain frontend Anda
 const corsMiddleware = cors({
-  origin: 'https://faisalabdulaziz123.github.io', // PENTING: Ganti dengan URL GitHub Pages Anda
+  origin: 'https://faisalabdulaziz123.github.io/fe_buku_tamu/', // PENTING: Ganti dengan URL GitHub Pages Anda
   methods: ['POST', 'OPTIONS'], // Izinkan metode POST dan OPTIONS (untuk preflight)
 });
 
