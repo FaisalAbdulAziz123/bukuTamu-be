@@ -1,13 +1,34 @@
 // File: api/tamu.js
 
-// Import pool koneksi dari file config/db.js yang baru
 import pool from "../config/db.js";
+import cors from 'cors'; // 1. Impor package cors
+
+// 2. Inisialisasi middleware cors dengan domain frontend Anda
+const corsMiddleware = cors({
+  origin: 'https://faisalabdulaziz123.github.io', // PENTING: Pastikan ini URL GitHub Pages Anda
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+});
+
+// 3. Buat fungsi helper untuk menjalankan middleware
+function runMiddleware(req, res, fn) {
+  return new Promise((resolve, reject) => {
+    fn(req, res, (result) => {
+      if (result instanceof Error) {
+        return reject(result);
+      }
+      return resolve(result);
+    });
+  });
+}
 
 // Fungsi utama yang menangani request
 export default async function handler(req, res) {
+  // 4. Jalankan middleware cors di awal handler
+  await runMiddleware(req, res, corsMiddleware);
+
   const { method } = req;
 
-  // Switch untuk menentukan aksi berdasarkan metode HTTpp
+  // Sisa kode Anda tidak berubah sama sekali
   switch (method) {
     case "GET":
       try {
@@ -35,9 +56,8 @@ export default async function handler(req, res) {
   }
 }
 
-// --- FUNGSI-FUNGSI LOGIKA (Sudah diubah ke async/await dan PostgreSQL) ---
+// --- FUNGSI-FUNGSI LOGIKA ANDA (TIDAK ADA PERUBAHAN) ---
 
-// GET /api/tamu - Ambil semua data tamu
 const getAllGuests = async (req, res) => {
   try {
     const sql = "SELECT * FROM tamu ORDER BY tanggal_kehadiran DESC, id DESC";
@@ -49,11 +69,10 @@ const getAllGuests = async (req, res) => {
   }
 };
 
-// GET /api/tamu?id=[id] - Ambil data tamu spesifik
 const getGuestById = async (req, res) => {
   const { id } = req.query;
   try {
-    const sql = "SELECT * FROM tamu WHERE id = $1"; // Placeholder diubah ke $1
+    const sql = "SELECT * FROM tamu WHERE id = $1";
     const result = await pool.query(sql, [id]);
 
     if (result.rows.length === 0) {
@@ -66,7 +85,6 @@ const getGuestById = async (req, res) => {
   }
 };
 
-// POST /api/tamu - Menyimpan data tamu baru
 const createGuest = async (req, res) => {
   const {
     nama_lengkap, jenis_kelamin, email, no_hp, pekerjaan, alamat, keperluan, staff, dituju, tanggal_kehadiran, tujuan_kunjungan, topik_konsultasi, deskripsi_kebutuhan, status
@@ -84,7 +102,7 @@ const createGuest = async (req, res) => {
         topik_konsultasi, deskripsi_kebutuhan, jam_submit_data
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
       RETURNING *; 
-    `; // Menggunakan RETURNING * untuk mendapatkan data yang baru dibuat
+    `;
 
     const values = [
       nama_lengkap, jenis_kelamin, email || null, no_hp, pekerjaan || null, alamat, keperluan, staff || null, dituju || null, tanggal_kehadiran,
@@ -103,7 +121,6 @@ const createGuest = async (req, res) => {
   }
 };
 
-// PUT /api/tamu?id=[id] - Update data tamu
 const updateGuest = async (req, res) => {
   const { id } = req.query;
   const fields = req.body;
@@ -126,7 +143,7 @@ const updateGuest = async (req, res) => {
     return res.status(400).json({ message: "Tidak ada data yang diubah." });
   }
 
-  values.push(id); // Tambahkan ID untuk klausa WHERE
+  values.push(id);
 
   try {
     const sql = `UPDATE tamu SET ${setClauses.join(", ")} WHERE id = $${paramIndex} RETURNING *;`;
@@ -143,14 +160,12 @@ const updateGuest = async (req, res) => {
   }
 };
 
-// DELETE /api/tamu?id=[id] - Hapus data tamu
 const deleteGuest = async (req, res) => {
   const { id } = req.query;
   try {
-    const sql = "DELETE FROM tamu WHERE id = $1"; // Placeholder diubah ke $1
+    const sql = "DELETE FROM tamu WHERE id = $1";
     const result = await pool.query(sql, [id]);
 
-    // Di 'pg', rowCount digunakan untuk cek jumlah baris yang terpengaruh
     if (result.rowCount === 0) {
       return res.status(404).json({ error: `Data tamu dengan ID ${id} tidak ditemukan untuk dihapus` });
     }
