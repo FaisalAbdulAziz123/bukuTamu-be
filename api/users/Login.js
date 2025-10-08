@@ -23,7 +23,7 @@ export default async function handler(req, res) { // Ubah menjadi async function
     // Gunakan await untuk menjalankan query
     const result = await pool.query(query, [username, password]);
 
-    // Hasilnya ada di 'result.rows'
+    // Hasilnya ada di 'result.rows
     if (result.rows.length > 0) {
       return res.status(200).json({ message: "Login berhasil", user: result.rows[0] });
     } else {
