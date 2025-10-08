@@ -9,7 +9,6 @@ const corsMiddleware = cors({
   methods: ['POST', 'OPTIONS'], // Izinkan metode POST dan OPTIONS (untuk preflight)
 });
 
-// 3. Buat fungsi helper untuk menjalankan middleware
 function runMiddleware(req, res, fn) {
   return new Promise((resolve, reject) => {
     fn(req, res, (result) => {
