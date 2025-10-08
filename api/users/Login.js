@@ -1,14 +1,16 @@
 // File: api/users/login.js
 
 import pool from "../../config/db.js";
-import cors from 'cors'; // 1. Impor package cors
+import cors from 'cors';
 
-// 2. Inisialisasi middleware cors dengan domain frontend Anda
+// Inisialisasi middleware cors dengan domain frontend Anda
 const corsMiddleware = cors({
-  origin: 'https://faisalabdulaziz123.github.io/fe_buku_tamu/', // PENTING: Ganti dengan URL GitHub Pages Anda
-  methods: ['POST', 'OPTIONS'], // Izinkan metode POST dan OPTIONS (untuk preflight)
+  // PERBAIKAN DI SINI: Hapus path dan slash di akhir
+  origin: 'https://faisalabdulaziz123.github.io',
+  methods: ['POST', 'OPTIONS'],
 });
 
+// Fungsi helper untuk menjalankan middleware
 function runMiddleware(req, res, fn) {
   return new Promise((resolve, reject) => {
     fn(req, res, (result) => {
@@ -22,7 +24,7 @@ function runMiddleware(req, res, fn) {
 
 // Fungsi utama
 export default async function handler(req, res) {
-  // 4. Jalankan middleware cors di awal handler
+  // Jalankan middleware cors di awal handler
   await runMiddleware(req, res, corsMiddleware);
   
   // Endpoint ini hanya menerima metode POST
